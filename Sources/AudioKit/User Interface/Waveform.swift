@@ -217,8 +217,8 @@ public class Waveform: CALayer {
             Log("Plots are empty... nothing to layout.", type: .error)
             return
         }
-        let width = frame.size.width
-        let height = frame.size.height
+        let width = bounds.size.width
+        let height = bounds.size.height
         let floatChannels = CGFloat(channels)
         var heightDivisor = floatChannels
 
