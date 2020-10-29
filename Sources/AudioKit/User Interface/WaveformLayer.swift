@@ -142,7 +142,8 @@ public class WaveformLayer: CAShapeLayer {
         halfPath.move(to: startPoint)
 
         let theWidth = max(1, Int(size.width))
-        let strideWidth = max(1, table.count / theWidth)
+        // TODO: Tmp, draw all points for now.
+        let strideWidth = 1//max(1, table.count / theWidth)
 
         // good for seeing what the stride is:
         //        if strideWidth > 1 {
