@@ -117,6 +117,12 @@ public class WaveformLayer: CAShapeLayer {
         let max = Double(table.max() ?? 1.0)
         let min = Double(table.min() ?? -1.0)
         absmax = [max, abs(min)].max() ?? 1.0
+
+        // If table has only zeros, then assume absmax = 1
+        // to avoid dividing by zero.
+        if absmax.isZero {
+            absmax = 1.0
+        }
     }
 
     private func updateLayerWithPath(with size: CGSize) {
