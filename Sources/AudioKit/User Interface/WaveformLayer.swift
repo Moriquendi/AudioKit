@@ -4,18 +4,15 @@ import CoreGraphics
 import QuartzCore
 
 /// A CAShapeLayer rendering of a mono waveform. Can be updated on any thread.
-public class WaveformLayer: CAShapeLayer {
+public class WaveformLayer: CALayer {
+
     /// controls whether to use the default CoreAnimation actions or not for property transitions
     public var allowActions: Bool = true
 
     /// Mirrored is the traditional DAW display
-    public var isMirrored: Bool = true {
-        didSet {
-            updateLayer()
-        }
-    }
-
-    private var _table: [Float]?
+    @objc public var isMirrored: Bool = true
+    
+    @objc private var _table: [Float]?
     /// Array of float values
     public var table: [Float]? {
         get {
@@ -32,20 +29,23 @@ public class WaveformLayer: CAShapeLayer {
             }
 
             _table = newValue
-            updateABSMax()
         }
     }
 
     /// Does this contain any information
-    public var isEmpty: Bool {
-        if let table = table, table.isNotEmpty {
-            return false
-        }
-        return true
-    }
+    public var isEmpty: Bool { table?.isEmpty ?? true }
 
-    private var absmax: Double = 1.0
-
+    //
+    // Some properties are marked with @objc
+    // so that some of the CALayers methods are called for them.
+    // Specifically, "needsDisplay(forKey key: String) -> Bool"
+    //
+    @objc public var absmax: Double = 1.0
+    @objc public var strokeColor: CGColor?
+    @objc public var lineWidth: CGFloat = 0.5 // default if stroke is used, otherwise this does nothing
+    @objc public var fillColor: CGColor? = CrossPlatformColor.black.cgColor
+    
+    
     /// Initialize with all parameters
     /// - Parameters:
     ///   - table: Array of floats
@@ -56,6 +56,7 @@ public class WaveformLayer: CAShapeLayer {
     ///   - opacity: Opacity
     ///   - isMirrored: Whether or not to display mirrored
     public convenience init(table: [Float],
+                            absmax: Double = 1.0,
                             size: CGSize? = nil,
                             fillColor: CGColor? = nil,
                             strokeColor: CGColor? = nil,
@@ -65,13 +66,15 @@ public class WaveformLayer: CAShapeLayer {
         self.init()
         self.table = table
         self.isMirrored = isMirrored
-        updateABSMax()
-
+        self.absmax = absmax
+        
         self.opacity = opacity
         self.backgroundColor = backgroundColor
+        
         self.strokeColor = strokeColor
         lineWidth = 0.5 // default if stroke is used, otherwise this does nothing
         self.fillColor = fillColor ?? CrossPlatformColor.black.cgColor
+        
         masksToBounds = false
         isOpaque = false
         drawsAsynchronously = true
@@ -82,25 +85,19 @@ public class WaveformLayer: CAShapeLayer {
     }
 
     // MARK: - Public Functions
-
+    
+    public override class func needsDisplay(forKey key: String) -> Bool {
+        switch key {
+        case "strokeColor", "fillColor", "absmax", "isMirrored", "lineWidth", "_table":
+            return true
+        default:
+            return super.needsDisplay(forKey: key)
+        }
+    }
+    
     /// controls whether to use the default CoreAnimation actions or not for property transitions
     override public func action(forKey event: String) -> CAAction? {
         return allowActions ? super.action(forKey: event) : nil
-    }
-
-    /// Update layer
-    public func updateLayer() {
-        updateLayer(with: frame.size)
-    }
-
-    /// Update layer with size
-    /// - Parameter size: Size of layer
-    public func updateLayer(with size: CGSize) {
-        guard size != CGSize.zero else {
-            return
-        }
-
-        updateLayerWithPath(with: size)
     }
 
     /// Remove all data
@@ -110,26 +107,23 @@ public class WaveformLayer: CAShapeLayer {
     }
 
     // MARK: - Private Functions
-
-    private func updateABSMax() {
-        guard let table = table else { return }
-
-        let max = Double(table.max() ?? 1.0)
-        let min = Double(table.min() ?? -1.0)
-        absmax = [max, abs(min)].max() ?? 1.0
-
-        // If table has only zeros, then assume absmax = 1
-        // to avoid dividing by zero.
-        if absmax.isZero {
-            absmax = 1.0
-        }
-    }
-
-    private func updateLayerWithPath(with size: CGSize) {
-        guard let path = createPath(at: size) else {
+    
+    public override func draw(in ctx: CGContext) {
+        guard let path = createPath(at: bounds.size) else {
             return
         }
-        self.path = path
+        
+        ctx.addPath(path)
+        
+        if let strokeColor = self.strokeColor {
+            ctx.setLineWidth(lineWidth)
+            ctx.setStrokeColor(strokeColor)
+            ctx.strokePath()
+        }
+        if let fillColor = self.fillColor {
+            ctx.setFillColor(fillColor)
+            ctx.fillPath()
+        }
     }
 
     private func createPath(at size: CGSize) -> CGPath? {
