@@ -31,6 +31,7 @@ public class Waveform: HTiledLayer {
         sublayers?.compactMap { $0 as? WaveformTile } ?? []
     }
 
+    // TODO: Move to HTiledLayer
     private var cachedTiles = NSCache<NSString, WaveformTile>()
     // We need this because NSCache doesn't allow enumerating on its keys/objects
     private var weakTilesArray = NSHashTable<WaveformTile>()
@@ -39,18 +40,28 @@ public class Waveform: HTiledLayer {
     
     public override var bounds: CGRect {
         didSet {
-//            print("Did set bounds: \(bounds)")
-            reloadTilesIfNeeded()
+            guard oldValue != bounds else { return }
+            print("Did set bounds: \(bounds)")
+            self.reloadTilesIfNeeded()
         }
     }
     
-    public override var frame: CGRect {
+    public override var position: CGPoint {
         didSet {
-//            print("Did set frame: \(frame)")
-            reloadTilesIfNeeded()
+            guard oldValue != position else { return }
+            print("Did set position: \(position)")
+            self.reloadTilesIfNeeded()
         }
     }
-        
+    
+    public override var transform: CATransform3D {
+        didSet {
+            guard !CATransform3DEqualToTransform(oldValue, transform) else { return }
+            print("Did set new transform.")
+            self.reloadTilesIfNeeded()
+        }
+    }
+    
     public override func layoutSublayers() {
         super.layoutSublayers()
         
@@ -78,6 +89,7 @@ public class Waveform: HTiledLayer {
     }
     
     public func visibleBoundsDidChange() {
+        reloadTilesIfNeeded()
         displayDirtyLayersInVisibleBounds()
     }
     
@@ -98,12 +110,11 @@ public class Waveform: HTiledLayer {
     }
     
     private func reloadTilesIfNeeded() {
-        guard !bounds.isEmpty else { return }
+        guard !visibleBounds.isEmpty && !visibleBounds.isInfinite else { return }
         
+        let newTilesInfo = tilesFor(viewport: visibleBounds)
         
-        let newTilesInfo = tilesFor(viewport: bounds)
-        
-        let oldTiles = tiles
+        let oldTiles = tiles.sorted { $0.info.index < $1.info.index }
         let oldInfos = oldTiles.map { $0.info }
         
         let diff = newTilesInfo.difference(from: oldInfos)

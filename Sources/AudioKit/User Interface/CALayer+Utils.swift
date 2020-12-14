@@ -10,7 +10,7 @@ import QuartzCore
 
 extension CALayer {
     
-    var visibleBounds: CGRect {
+    public var visibleBounds: CGRect {
         var rect = frame
         var current = self.superlayer
         rect = self.convert(bounds, to: current!)

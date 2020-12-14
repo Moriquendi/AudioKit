@@ -57,7 +57,8 @@ public class HTiledLayer: CALayer {
     
     func tilesFor(viewport: CGRect) -> [TileInfo] {
         let startIndex = Int((viewport.minX / displayedTileSize.width).rounded(.down))
-        let endIndex = Int((viewport.maxX / displayedTileSize.width).rounded(.up) - 1)
+        var endIndex = Int((viewport.maxX / displayedTileSize.width).rounded(.up) - 1)
+        endIndex = min(endIndex, tilesCountAt(scale: scale) - 1)
         
         let scale = self.scale
         var all: [TileInfo] = []
