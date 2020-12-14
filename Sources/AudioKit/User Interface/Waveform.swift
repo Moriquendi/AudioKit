@@ -30,19 +30,23 @@ public class Waveform: HTiledLayer {
     private var tiles: [WaveformTile] {
         sublayers?.compactMap { $0 as? WaveformTile } ?? []
     }
+
+    private var cachedTiles = NSCache<NSString, WaveformTile>()
+    // We need this because NSCache doesn't allow enumerating on its keys/objects
+    private var weakTilesArray = NSHashTable<WaveformTile>()
     
     // MARK: - Public functions
     
     public override var bounds: CGRect {
         didSet {
-            print("Did set bounds: \(bounds)")
+//            print("Did set bounds: \(bounds)")
             reloadTilesIfNeeded()
         }
     }
     
     public override var frame: CGRect {
         didSet {
-            print("Did set frame: \(frame)")
+//            print("Did set frame: \(frame)")
             reloadTilesIfNeeded()
         }
     }
@@ -50,8 +54,7 @@ public class Waveform: HTiledLayer {
     public override func layoutSublayers() {
         super.layoutSublayers()
         
-        print("Layout: \(bounds)")
-        
+        //print("Layout: \(bounds)")
         //
         // Move tiles layout logic to HTiledLayer
         //
@@ -64,12 +67,13 @@ public class Waveform: HTiledLayer {
     }
     
     public func markAsDirty(rect: CGRect) {
-        tiles.forEach {
+        let all = weakTilesArray.allObjects + tiles
+        all.forEach {
             if rect.intersects($0.frame) {
-//                print("Marking dirty. \($0.info.index)")
                 $0.isDirty = true
             }
         }
+
         displayDirtyLayersInVisibleBounds()
     }
     
@@ -111,8 +115,18 @@ public class Waveform: HTiledLayer {
         for change in diff {
             switch change {
             case .insert(_, let tileInfo, _):
-                let tile = WaveformTile(info: tileInfo)
-                tile.autoresizingMask = []
+                let tile: WaveformTile
+                
+                let cacheKey = "\(tileInfo.hashValue)" as NSString
+                if let cachedTile = cachedTiles.object(forKey: cacheKey) {
+                    tile = cachedTile
+                } else {
+                    tile = WaveformTile(info: tileInfo)
+                    tile.autoresizingMask = []
+                    cachedTiles.setObject(tile, forKey: cacheKey)
+                    weakTilesArray.add(tile)
+                }
+            
                 addSublayer(tile)
             case .remove(let offset, _, _):
                 oldTiles[offset].removeFromSuperlayer()

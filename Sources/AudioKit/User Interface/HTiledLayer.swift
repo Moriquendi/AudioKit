@@ -8,10 +8,17 @@
 import Foundation
 import QuartzCore
 
-public struct TileInfo: Equatable {
+struct TileInfo: Equatable, Hashable {
     let index: Int
     let size: CGSize
     let scale: CGFloat
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(index)
+        hasher.combine(size.width)
+        hasher.combine(size.height)
+        hasher.combine(scale)
+    }
 }
 
 public class HTiledLayer: CALayer {
@@ -32,7 +39,9 @@ public class HTiledLayer: CALayer {
     }
     
     func frameFor(tileInfo: TileInfo) -> CGRect {
-        let width = tileInfo.size.width
+        let scaleRatio: CGFloat = 1.0// pow(2.0, tileInfo.scale - scale) - I think?
+        
+        let width = tileInfo.size.width * scaleRatio
         let x = CGFloat(tileInfo.index) * width
         
         return CGRect(x: x,

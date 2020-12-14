@@ -143,7 +143,8 @@ public class WaveformLayer: CALayer {
 
         let theWidth = max(1, Int(size.width))
         // TODO: Tmp, draw all points for now.
-        let strideWidth = 1//max(1, table.count / theWidth)
+        //let strideWidth = max(1, table.count / theWidth)
+        let strideWidth = 1
 
         // good for seeing what the stride is:
         //        if strideWidth > 1 {
