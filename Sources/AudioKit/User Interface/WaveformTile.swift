@@ -20,7 +20,8 @@ class WaveformTile: WaveformLayer {
         self.info = info
         
         super.init()
-    
+        
+        contentsScale = 2.0
         setup()
     }
     
@@ -30,6 +31,7 @@ class WaveformTile: WaveformLayer {
     
     public override func setNeedsDisplay() {
         super.setNeedsDisplay()
+//        print("Mark to display \(info.index) | Data: \(data?.data.count ?? 0)")
         isDirty = false
     }
     
@@ -42,8 +44,13 @@ class WaveformTile: WaveformLayer {
     private func setup() {
         contentsGravity = .resize
         
+        // TODO: Would any of these boost the performance?
+        //magnificationFilter = .trilinear
+        //shouldRasterize = true
+        //allowsEdgeAntialiasing = false
+        
         // Debugging
-        // borderWidth = 1
-        // borderColor = CGColor(red: 0, green: 1, blue: 0, alpha: 1)
+         //borderWidth = 1
+         //borderColor = CGColor(red: 0, green: 1, blue: 0, alpha: 1)
     }
 }

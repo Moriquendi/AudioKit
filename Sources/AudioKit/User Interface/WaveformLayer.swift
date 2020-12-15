@@ -3,6 +3,17 @@
 import CoreGraphics
 import QuartzCore
 
+public struct WaveformDataSlice {
+    let data: [Float]
+    let rect: CGRect
+    
+    public init(data: [Float],
+                rect: CGRect) {
+        self.data = data
+        self.rect = rect
+    }
+}
+
 /// A CAShapeLayer rendering of a mono waveform. Can be updated on any thread.
 public class WaveformLayer: CALayer {
 
@@ -12,28 +23,33 @@ public class WaveformLayer: CALayer {
     /// Mirrored is the traditional DAW display
     @objc public var isMirrored: Bool = true
     
-    @objc private var _table: [Float]?
+    @objc public var drawSampleMarkers: Bool = false
+    
+    private var _data: WaveformDataSlice? {
+        didSet { setNeedsDisplay() }
+    }
     /// Array of float values
-    public var table: [Float]? {
+    
+    public var data: WaveformDataSlice? {
         get {
-            return _table
+            return _data
         }
         set {
             guard let newValue = newValue else {
-                _table = nil
+                _data = nil
                 return
             }
             // validate data
-            for value in newValue where !value.isFinite {
+            for value in newValue.data where !value.isFinite {
                 return
             }
 
-            _table = newValue
+            _data = newValue
         }
     }
 
     /// Does this contain any information
-    public var isEmpty: Bool { table?.isEmpty ?? true }
+    public var isEmpty: Bool { data?.data.isEmpty ?? true }
 
     //
     // Some properties are marked with @objc
@@ -48,14 +64,14 @@ public class WaveformLayer: CALayer {
     
     /// Initialize with all parameters
     /// - Parameters:
-    ///   - table: Array of floats
+    ///   - data: Array of floats
     ///   - size: Layer size
     ///   - fillColor: Fill Color
     ///   - strokeColor: Stroke color
     ///   - backgroundColor: Backround color
     ///   - opacity: Opacity
     ///   - isMirrored: Whether or not to display mirrored
-    public convenience init(table: [Float],
+    public convenience init(data: WaveformDataSlice,
                             absmax: Double = 1.0,
                             size: CGSize? = nil,
                             fillColor: CGColor? = nil,
@@ -64,7 +80,7 @@ public class WaveformLayer: CALayer {
                             opacity: Float = 1,
                             isMirrored: Bool = false) {
         self.init()
-        self.table = table
+        self.data = data
         self.isMirrored = isMirrored
         self.absmax = absmax
         
@@ -88,7 +104,7 @@ public class WaveformLayer: CALayer {
     
     public override class func needsDisplay(forKey key: String) -> Bool {
         switch key {
-        case "strokeColor", "fillColor", "absmax", "isMirrored", "lineWidth", "_table":
+        case "strokeColor", "fillColor", "absmax", "isMirrored", "lineWidth", "drawSampleMarkers":
             return true
         default:
             return super.needsDisplay(forKey: key)
@@ -102,79 +118,118 @@ public class WaveformLayer: CALayer {
 
     /// Remove all data
     public func dispose() {
-        table?.removeAll()
-        table = nil
+        data = nil
     }
 
     // MARK: - Private Functions
     
     public override func draw(in ctx: CGContext) {
-        guard let path = createPath(at: bounds.size) else {
+        guard let (linePath, markersPath) = createPath(at: bounds.size) else {
             return
         }
         
-        ctx.addPath(path)
+        
+        // TODO:
+        // Disable antialias?
+        // ctx.setShouldAntialias(false)
+        ctx.interpolationQuality = .none
         
         if let strokeColor = self.strokeColor {
+            ctx.addPath(linePath)
             ctx.setLineWidth(lineWidth)
             ctx.setStrokeColor(strokeColor)
             ctx.strokePath()
         }
         if let fillColor = self.fillColor {
-            ctx.setFillColor(fillColor)
-            ctx.fillPath()
+            
+            if !drawSampleMarkers {
+                ctx.addPath(linePath)
+                ctx.setFillColor(fillColor)
+                ctx.fillPath()
+            }
+            
+            if let markersPath = markersPath {
+                ctx.addPath(markersPath)
+                ctx.setFillColor(fillColor)
+                ctx.fillPath()
+            }
         }
     }
 
-    private func createPath(at size: CGSize) -> CGPath? {
-        guard let table = table,
-            table.isNotEmpty,
-            size != CGSize.zero else {
+    private func createPath(at size: CGSize) -> (CGPath, CGPath?)? {
+        guard let data = data else { return nil }
+        let table = data.data
+        guard table.isNotEmpty,
+              size != CGSize.zero else {
             return nil
         }
 
+        // TODO: Kinda 'meh' and unsafe
+        let dataRect = convert(data.rect, from: superlayer)
         let half: CGFloat = isMirrored ? 2 : 1
         let halfHeight = size.height / half
-        let path = CGMutablePath()
+        
         let halfPath = CGMutablePath()
-        let startPoint = CGPoint(x: 0, y: 0)
-
+        let markersMutablePath = CGMutablePath()
+        
+        let startPoint = CGPoint(x: dataRect.minX, y: 0)
         halfPath.move(to: startPoint)
 
         let theWidth = max(1, Int(size.width))
         // TODO: Tmp, draw all points for now.
         //let strideWidth = max(1, table.count / theWidth)
         let strideWidth = 1
-
-        // good for seeing what the stride is:
-        //        if strideWidth > 1 {
-        //            Log("table.count", table.count, "strideWidth", strideWidth)
-        //        }
-        // this is a sort of visual normalization - not desired in an accurate dB situation
-        let sampleDrawingScale = Double(halfHeight) / absmax * 0.85
-
+        let sampleDrawingVScale = halfHeight / CGFloat(absmax * 0.85)
+        
+        
+        
         for i in stride(from: 0, to: table.count, by: strideWidth) {
-            let x = Double(i) / Double(table.count) * Double(size.width)
-            let y = Double(table[i]) * sampleDrawingScale
+            let xJump = CGFloat(dataRect.size.width) / CGFloat(table.count)
+            let x = startPoint.x + CGFloat(i) * xJump
+            let y = CGFloat(table[i]) * sampleDrawingVScale
 
             halfPath.addLine(to: CGPoint(x: x, y: y))
-        }
-        halfPath.addLine(to: CGPoint(x: size.width, y: startPoint.y))
-
-        // if mirrored just copy the path and flip it upside down
-        if isMirrored {
-            var xf: CGAffineTransform = .identity
-            xf = xf.translatedBy(x: 0.0, y: halfHeight)
-            path.addPath(halfPath, transform: xf)
-
-            xf = xf.scaledBy(x: 1.0, y: -1)
-            if let copy = halfPath.copy(using: &xf) {
-                path.addPath(copy)
+            
+            
+            // Drawing rect on each sample
+            if drawSampleMarkers {
+                var sampleRect = CGRect(width: 8, height: 8)
+                sampleRect.origin = CGPoint(x: x + 4, y: y - 4)
+                markersMutablePath.addEllipse(in: sampleRect)
             }
-        } else {
-            path.addPath(halfPath)
         }
+        halfPath.addLine(to: CGPoint(x: dataRect.maxX, y: 0))
+        
+        // If mirrored just copy the path and flip it upside down
+        let linePath: CGPath
+        var markersPath: CGPath?
+        if isMirrored {
+            linePath = halfPath.mirrored(halfHeight: halfHeight)
+            markersPath = markersMutablePath.mirrored(halfHeight: halfHeight)
+        } else {
+            linePath = halfPath
+        }
+                
+        return (linePath, markersPath)
+    }
+    
+}
 
+extension CGPath {
+    
+    func mirrored(halfHeight: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        
+        var xf: CGAffineTransform = .identity
+        xf = xf.translatedBy(x: 0.0, y: halfHeight)
+        path.addPath(self, transform: xf)
+
+        xf = xf.scaledBy(x: 1.0, y: -1)
+        
+        if let copy = self.copy(using: &xf) {
+            path.addPath(copy)
+        }
         return path
     }
+    
 }

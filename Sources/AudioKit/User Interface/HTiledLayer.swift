@@ -31,7 +31,7 @@ public class HTiledLayer: CALayer {
         // tileSize.width * 2^scale >= bounds.size.width
         // 2^scale >= bounds.size.width / tileSize.width
         // scale = log2(...)
-        log2(bounds.size.width / tileSize.width).rounded(.up)
+        max(1.0, log2(bounds.size.width / tileSize.width).rounded(.up))
     }
     
     public func tilesCountAt(scale: CGFloat) -> Int {
@@ -56,7 +56,9 @@ public class HTiledLayer: CALayer {
     }
     
     func tilesFor(viewport: CGRect) -> [TileInfo] {
-        let startIndex = Int((viewport.minX / displayedTileSize.width).rounded(.down))
+        var startIndex = Int((viewport.minX / displayedTileSize.width).rounded(.down))
+        startIndex = max(0, startIndex)
+        
         var endIndex = Int((viewport.maxX / displayedTileSize.width).rounded(.up) - 1)
         endIndex = min(endIndex, tilesCountAt(scale: scale) - 1)
         

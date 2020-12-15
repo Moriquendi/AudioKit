@@ -12,7 +12,7 @@ import QuartzCore
 
 
 public protocol WaveformDataSource: class {
-    func waveform(_ waveform: Waveform, dataFor rect: CGRect) -> [Float]?
+    func waveform(_ waveform: Waveform, dataFor rect: CGRect) -> WaveformDataSlice?
 }
 
 public class Waveform: HTiledLayer {
@@ -20,7 +20,10 @@ public class Waveform: HTiledLayer {
     public weak var dataSource: WaveformDataSource?
         
     public var waveformColor: CGColor = CrossPlatformColor.black.cgColor {
-        didSet { markAsDirty(rect: bounds) }
+        didSet {
+            guard oldValue != waveformColor else { return }
+            markAsDirty(rect: bounds)
+        }
     }
     
     // Set if known in advance.
@@ -36,31 +39,21 @@ public class Waveform: HTiledLayer {
     // We need this because NSCache doesn't allow enumerating on its keys/objects
     private var weakTilesArray = NSHashTable<WaveformTile>()
     
+    public var visibleBounds: CGRect = .zero {
+        didSet {
+            guard oldValue != visibleBounds else { return }
+            visibleBoundsDidChange()
+        }
+    }
+    
+    public override var contentsScale: CGFloat {
+        didSet {
+            guard oldValue != contentsScale else { return }
+            markAsDirty(rect: bounds) // This will update contentsScale on all tiles
+        }
+    }
+    
     // MARK: - Public functions
-    
-    public override var bounds: CGRect {
-        didSet {
-            guard oldValue != bounds else { return }
-            print("Did set bounds: \(bounds)")
-            self.reloadTilesIfNeeded()
-        }
-    }
-    
-    public override var position: CGPoint {
-        didSet {
-            guard oldValue != position else { return }
-            print("Did set position: \(position)")
-            self.reloadTilesIfNeeded()
-        }
-    }
-    
-    public override var transform: CATransform3D {
-        didSet {
-            guard !CATransform3DEqualToTransform(oldValue, transform) else { return }
-            print("Did set new transform.")
-            self.reloadTilesIfNeeded()
-        }
-    }
     
     public override func layoutSublayers() {
         super.layoutSublayers()
@@ -82,6 +75,7 @@ public class Waveform: HTiledLayer {
         all.forEach {
             if rect.intersects($0.frame) {
                 $0.isDirty = true
+                $0.contentsScale = self.contentsScale
             }
         }
 
@@ -90,20 +84,24 @@ public class Waveform: HTiledLayer {
     
     public func visibleBoundsDidChange() {
         reloadTilesIfNeeded()
-        displayDirtyLayersInVisibleBounds()
+        setNeedsLayout()
     }
     
     private func displayDirtyLayersInVisibleBounds() {
         let visibleBounds = self.visibleBounds
         for tile in tiles {
             if tile.isDirty && visibleBounds.intersects(tile.frame) {
-                //print("Mark to display \(tile.info.index)")
-                
-                let data = dataSource?.waveform(self, dataFor: tile.frame)
-                absmax = max(absmax, Double(data?.max() ?? 0.0))
+                let dataSlice = dataSource?.waveform(self, dataFor: tile.frame)
+
+                absmax = max(absmax, Double(dataSlice?.data.max() ?? 0.0))
                 tile.absmax = absmax
-                tile.table = data
+                tile.data = dataSlice
+                
+                
+                tile.drawSampleMarkers = tile.info.scale > 16
+                //tile.strokeColor = CrossPlatformColor.red.cgColor
                 tile.fillColor = waveformColor
+                
                 tile.setNeedsDisplay()
             }
         }
@@ -120,7 +118,7 @@ public class Waveform: HTiledLayer {
         let diff = newTilesInfo.difference(from: oldInfos)
         
         if !diff.isEmpty {
-            print("Reloading tiles at scale=\(scale). Changes: \(diff.count)")
+            print("Reloading tiles at scale=\(scale). \(visibleBounds) | Changes: \(diff.count)")
         }
         
         for change in diff {
@@ -134,10 +132,11 @@ public class Waveform: HTiledLayer {
                 } else {
                     tile = WaveformTile(info: tileInfo)
                     tile.autoresizingMask = []
+                    tile.contentsScale = contentsScale
                     cachedTiles.setObject(tile, forKey: cacheKey)
                     weakTilesArray.add(tile)
                 }
-            
+                
                 addSublayer(tile)
             case .remove(let offset, _, _):
                 oldTiles[offset].removeFromSuperlayer()
