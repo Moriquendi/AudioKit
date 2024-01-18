@@ -12,7 +12,7 @@ open class MusicTrackManager {
     /// A copy of the original track at init
     open var initMusicTrack: MusicTrack?
 
-    fileprivate var name: String = "Unnamed"
+    open var name: String = "Unnamed"
 
     /// Sequencer this music track is part of
     open var sequencer = AppleSequencer()
@@ -734,7 +734,9 @@ open class MusicTrackManager {
     @available(tvOS 12.0, *)
     public func setMIDIOutput(_ endpoint: MIDIEndpointRef) {
         if let track = internalMusicTrack {
-            MusicTrackSetDestMIDIEndpoint(track, endpoint)
+            if MusicTrackSetDestMIDIEndpoint(track, endpoint) == kAudioToolboxErr_InvalidPlayerState {
+                Log("🛑 Error: InvalidPlayerState. Please stop any sequencer playback before performing this operation.")
+            }
         }
     }
 }
