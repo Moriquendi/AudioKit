@@ -48,7 +48,7 @@ public extension MultiChannelInputNodeTap {
             self.ioLatency = ioLatency
         }
 
-        internal func createFile() {
+        public func createFile() {
             guard file == nil else { return }
 
             do {

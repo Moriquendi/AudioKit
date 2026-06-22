@@ -2,6 +2,15 @@
 
 import AVFoundation
 
+extension AVAudioNode {
+    var akAUAudioUnit: AUAudioUnit {
+        if #available(macOS 13.0, iOS 11.0, tvOS 11.0, macCatalyst 13.1, visionOS 1.0, *) {
+            return auAudioUnit
+        }
+        fatalError("AUAudioUnit access requires macOS 13 or newer.")
+    }
+}
+
 /// Node in an audio graph.
 public protocol Node: AnyObject {
     /// Nodes providing audio input to this node.
@@ -44,7 +53,7 @@ public extension Node {
     ///   - offset: Time in samples
     ///
     func scheduleMIDIEvent(event: MIDIEvent, offset: UInt64 = 0) {
-        if let midiBlock = avAudioNode.auAudioUnit.scheduleMIDIEventBlock {
+        if let midiBlock = avAudioNode.akAUAudioUnit.scheduleMIDIEventBlock {
             event.data.withUnsafeBufferPointer { ptr in
                 guard let ptr = ptr.baseAddress else { return }
                 midiBlock(AUEventSampleTimeImmediate + AUEventSampleTime(offset), 0, event.data.count, ptr)
@@ -93,7 +102,7 @@ public extension Node {
             }
         }
 
-        avAudioNode.auAudioUnit.parameterTree = AUParameterTree.createTree(withChildren: params)
+        avAudioNode.akAUAudioUnit.parameterTree = AUParameterTree.createTree(withChildren: params)
     }
 }
 
@@ -173,8 +182,8 @@ extension Node {
     }
 
     var bypassed: Bool {
-        get { avAudioNode.auAudioUnit.shouldBypassEffect }
-        set { avAudioNode.auAudioUnit.shouldBypassEffect = newValue }
+        get { avAudioNode.akAUAudioUnit.shouldBypassEffect }
+        set { avAudioNode.akAUAudioUnit.shouldBypassEffect = newValue }
     }
 }
 
